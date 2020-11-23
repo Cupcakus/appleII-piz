@@ -1,0 +1,12 @@
+github.com/faiface/gui v0.0.0-20190522095505-ed00d80d15da h1:boFffA5Rv6WgwUWwWlHyk7qHfw1OkhZJJC91cCY4oBc=
+github.com/faiface/gui v0.0.0-20190522095505-ed00d80d15da/go.mod h1:FwTW4XT4ioo6pOkdNqVBycvSbZ881cVXVDLF8AA66uQ=
+github.com/faiface/mainthread v0.0.0-20171120011319-8b78f0a41ae3 h1:baVdMKlASEHrj19iqjARrPbaRisD7EuZEVJj6ZMLl1Q=
+github.com/faiface/mainthread v0.0.0-20171120011319-8b78f0a41ae3/go.mod h1:VEPNJUlxl5KdWjDvz6Q1l+rJlxF2i6xqDeGuGAxa87M=
+github.com/go-gl/gl v0.0.0-20190320180904-bf2b1f2f34d7 h1:SCYMcCJ89LjRGwEa0tRluNRiMjZHalQZrVrvTbPh+qw=
+github.com/go-gl/gl v0.0.0-20190320180904-bf2b1f2f34d7/go.mod h1:482civXOzJJCPzJ4ZOX/pwvXBWSnzD4OKMdH4ClKGbk=
+github.com/go-gl/glfw v0.0.0-20201108214237-06ea97f0c265 h1:y+9kl/LaBMwLfNwCg5BbnHIWBGKeYokXTSBhGnwWcB8=
+github.com/go-gl/glfw v0.0.0-20201108214237-06ea97f0c265/go.mod h1:vR7hzQXu2zJy9AVAgeJqvqgH9Q5CA+iKCZ2gyEVpxRU=
+github.com/gonutz/framebuffer v0.0.0-20161010133700-868cfcb58bff h1:lHh3OhAPgmhtnzOXhTt1UUDn13MLysQMZyml6h06C2I=
+github.com/gonutz/framebuffer v0.0.0-20161010133700-868cfcb58bff/go.mod h1:Koh0HRyJGrLmNyCf2jhH6mvTO6WVF+YSWfnPq8M06Gk=
+github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 h1:zYyBkD/k9seD2A7fsi6Oo2LfFZAehjjQMERAvZLEDnQ=
+github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646/go.mod h1:jpp1/29i3P1S/RLdc7JQKbRpFeM1dOBd8T9ki5s+AY8=
