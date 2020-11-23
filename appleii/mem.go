@@ -75,13 +75,13 @@ func NewMem(b *Bus) *Mem {
 		m.aux[i+3] = 0xFF
 	}
 
-	data, err := ioutil.ReadFile("./data/Apple2e.rom")
+	data, err := ioutil.ReadFile("./data/system.bin")
 	if err != nil {
 		log.Fatal("Failed to load system ROM")
 	}
 	m.rom = data
 
-	data, err = ioutil.ReadFile("./data/boot-rom.bin")
+	data, err = ioutil.ReadFile("./data/boot.bin")
 	if err != nil {
 		log.Fatal("Failed to load boot ROM")
 	}
