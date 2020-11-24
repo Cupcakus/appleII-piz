@@ -38,7 +38,7 @@ func NewDsk(b *Bus) *Dsk {
 	d := Dsk{bus: b}
 	d.bus.Add(&d, 0xC0E0, 0xC0EF)
 
-	d.disk1 = NewDiskette("./disks/c.dsk")
+	//d.disk1 = NewDiskette("./disks/c.dsk")
 
 	return &d
 }
