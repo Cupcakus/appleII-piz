@@ -30,8 +30,10 @@ type Mem struct {
 	rom           []byte //ROM from $C000-$FFFF
 	boot          []byte //Disk ][ boot rom
 	bus           *Bus
+	cpu           *CPU
 	keyboardLatch uint8
 	preWrite      bool
+	savedCycles   uint64 //Save the cycle count on a PTRIG
 	//MAIN/AUX is $0200 to $BFFF
 	RDMAIN bool //True: Read from main, False: Read from aux
 	WRMAIN bool //True: Write main, False: Write aux
@@ -61,8 +63,8 @@ type Mem struct {
 }
 
 //NewMem Creates a new RAM object (64k)
-func NewMem(b *Bus) *Mem {
-	m := Mem{bus: b, mem: make([]byte, 65536), aux: make([]byte, 65536), RDMAIN: true, WRMAIN: true, MAINZP: true}
+func NewMem(b *Bus, c *CPU) *Mem {
+	m := Mem{bus: b, mem: make([]byte, 65536), aux: make([]byte, 65536), cpu: c, RDMAIN: true, WRMAIN: true, MAINZP: true}
 
 	for i := 0; i < 65536; i += 4 {
 		m.mem[i] = 0xFF
@@ -262,7 +264,6 @@ func (m *Mem) ioRW(aRead bool) uint8 {
 	if m.bus.addr >= 0xC080 && m.bus.addr <= 0xC08F {
 		m.doLCBankSwitch(aRead)
 	} else if aRead == false {
-		//fmt.Printf("IOWRITE: 0x%x\n", m.bus.addr)
 		//WRITE
 		//Set the "Soft Switches"
 		switch m.bus.addr {
@@ -421,6 +422,15 @@ func (m *Mem) ioRW(aRead bool) uint8 {
 			if m.KBDSHIFT {
 				return 0x80
 			}
+		case 0xC064, 0xC065, 0xC066, 0xC067:
+			//No paddle support right now, so just report all joysticks are in the "middle"
+			c := (m.cpu.GetCycleCount() - m.savedCycles) / 11
+			if c >= 127 {
+				return 0
+			}
+			return 0x80
+		case 0xC070:
+			m.savedCycles = m.cpu.GetCycleCount()
 		case 0xC07F:
 			if m.DBLHIRES {
 				return 0x80

@@ -220,6 +220,11 @@ func NewCPU(b *Bus) *CPU {
 	return &cpu
 }
 
+//GetCycleCount gets the total running cycle count of the CPU
+func (c *CPU) GetCycleCount() uint64 {
+	return c.cycleCount
+}
+
 //Reset the CPU
 func (c *CPU) Reset() {
 	//On reset we set all flags and registers to 0

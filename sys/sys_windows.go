@@ -99,7 +99,7 @@ func run() {
 	}
 	bus := appleii.NewBus()
 	cpu := appleii.NewCPU(bus)
-	mem := appleii.NewMem(bus)
+	mem := appleii.NewMem(bus, cpu)
 	appleii.NewDsk(bus)
 	bus.Add(mem, 0, 0xFFFF)
 	kbd := appleii.NewKbd(mem, cpu)
