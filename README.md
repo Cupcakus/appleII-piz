@@ -22,6 +22,8 @@ Special Keys are hard mapped as so:
 
 `END -> SOLID APPLE`
 
+`PGDN -> COLOR/MONOCHROME`
+
 All other keys match 1:1 with a standard PC keyboard
 
 ## Emulated Features
@@ -30,15 +32,16 @@ All other keys match 1:1 with a standard PC keyboard
 * Expanded Memory to 128k
 * Mixed Graphics/Text in all modes
 * RGB Color / Monochrome (No NTSC Filters)
-* Low Resolution Graphics
-* High Resolution Graphics
-* Double High Resolution Graphics
+* Low Resolution Graphics (GR)
+* High Resolution Graphics (HGR)
+* Double Low Resolution Graphics (DGR) *Did anything actually use this?*
+* Double High Resolution Graphics (DHGR)
 * Disk ][ Controller Support (35 Track/16 Sector DOS 3.3 Disks Only) (Read Only for now)
 
 ## Still TODO
 * Audio (Audio will be PI only, and will require a speaker on the GPIO)
-* Rendering performance improvements
 * Disk write support
+* Joystick/Paddle Support
 * GUI for loading/ejecting disks
 * Support for hardware disks (Special feature of my AppleIIe Mini project)
 

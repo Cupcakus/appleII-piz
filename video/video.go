@@ -36,10 +36,12 @@ type Renderer interface {
 
 //System Apple IIe Generic video system
 type System struct {
-	rom     []byte       //4k Character rom for text mode
-	display *image.RGBA  //Display buffer
-	bus     *appleii.Bus //Memory module holds the status flags
-	ren     Renderer
+	rom         []byte       //4k Character rom for text mode
+	renderColor bool         //Color Display or Monochrome?
+	monoColor   color.RGBA   //Color to display if in Monochrome mode
+	bus         *appleii.Bus //Memory module holds the status flags
+	ren         Renderer
+	screen      [][]uint8
 }
 
 var rowOffsets = [24]uint16{0x0, 0x80, 0x100, 0x180, 0x200, 0x280, 0x300, 0x380, 0x28, 0xA8, 0x128, 0x1A8, 0x228, 0x2A8, 0x328, 0x3A8, 0x50, 0xD0, 0x150, 0x1D0, 0x250, 0x2D0, 0x350, 0x3D0}
@@ -47,8 +49,6 @@ var rowOffsets = [24]uint16{0x0, 0x80, 0x100, 0x180, 0x200, 0x280, 0x300, 0x380,
 var lowResColors = [16]color.RGBA{{0, 0, 0, 255}, {147, 11, 124, 255}, {31, 53, 211, 255}, {187, 54, 255, 255}, {0, 118, 12, 255},
 	{86, 86, 86, 255}, {7, 168, 224, 255}, {157, 172, 255, 255}, {98, 76, 0, 255}, {249, 86, 29, 255}, {126, 126, 126, 255},
 	{255, 129, 236, 255}, {67, 200, 0, 255}, {220, 205, 22, 255}, {93, 247, 132, 255}, {255, 255, 255, 0}}
-
-//var hiResColors = [16]int{black, darkblue, darkgreen, mediumblue, brown, gray2, lightgreen, aquamarine, magenta, purple, gray, lightblue, orange, pink, yellow, white}
 
 var hiResColors = [16]uint8{black, magenta, brown, orange, darkgreen, gray, lightgreen, yellow, darkblue, purple, gray2, pink, mediumblue, lightblue, aquamarine, white}
 
@@ -79,34 +79,40 @@ func NewVideo(b *appleii.Bus, r Renderer) *System {
 		log.Fatal("Failed to video ROM")
 	}
 
-	rect := image.Rect(0, 0, 560, 384)
-	sys := System{rom: data, bus: b, ren: r, display: image.NewRGBA(rect)}
+	sys := System{rom: data, bus: b, ren: r, renderColor: true}
+	sys.monoColor = lowResColors[lightgreen]
+
 	r.Init()
 	return &sys
 }
 
-func (s *System) drawHiResGlyph(addr int, mem []uint8) draw.Image {
-	rect := image.Rect(0, 0, 14, 16)
-	img := image.NewRGBA(rect)
+//ToggleColorMode Set color or monochrome rendering mode
+func (s *System) ToggleColorMode() {
+	s.renderColor = !s.renderColor
+}
 
+//SetMonochromeColor sets the color for monochrome mode, default is lightgreen
+func (s *System) SetMonochromeColor(color color.RGBA) {
+	s.monoColor = color
+}
+
+func (s *System) drawHiResGlyph(aX, aY, addr int, mem []uint8) {
 	for y := 0; y < 16; y += 2 {
 		data := mem[addr+((y>>1)*0x400)]
-		alpha := uint8(255)
+		color := uint8(white)
 		if data&(1<<7) != 0 {
-			//Stash the color block for these 7 pixels into the alpha channel
-			alpha = 0
+			//Use lightblue to indicate the half-pixel shift
+			color = uint8(lightblue)
 		}
 		for x := 0; x < 14; x += 2 {
 			if data&(1<<(x>>1)) != 0 {
-				img.Set(x, y, color.RGBA{255, 255, 255, alpha})
-				img.Set(x+1, y, color.RGBA{255, 255, 255, alpha})
-				img.Set(x, y+1, color.RGBA{255, 255, 255, alpha})
-				img.Set(x+1, y+1, color.RGBA{255, 255, 255, alpha})
+				s.screen[x+aX][y+aY] = color
+				s.screen[x+aX+1][y+aY] = color
+				s.screen[x+aX][y+aY+1] = color
+				s.screen[x+aX+1][y+aY+1] = color
 			}
 		}
 	}
-
-	return img
 }
 
 func getHiResColor(bits uint8) color.RGBA {
@@ -120,10 +126,7 @@ func getHiResColor(bits uint8) color.RGBA {
 // 1. http://www.appleoldies.ca/graphics/dhgr/dhgrtechnote.txt (Tech Note #3 describes memory layout and 4 pixel block pattern)
 // 2. http://lukazi.blogspot.com/2017/03/double-high-resolution-graphics-dhgr.html (Lukazi explains how the moving window of the color burst causes interference on certain color transitions)
 // 3. https://groups.google.com/g/comp.emulators.apple2/c/l_yFH3HIyQU/m/sWG9zrT1tegJ (Apparently bit 7 OFF on AUX1 byte of 4 byte group indicates color should be turned off
-func (s *System) drawDblHiResGlyph(addr int, mem []uint8, aux []uint8) draw.Image {
-	rect := image.Rect(0, 0, 28, 16)
-	img := image.NewRGBA(rect)
-
+func (s *System) drawDblHiResGlyph(aX, aY, addr int, mem []uint8, aux []uint8) {
 	//A hires glyph is 28 pixels wide by 16 tall. The color resolution is only 7 pixels
 	for y := 0; y < 16; y += 2 {
 		data0 := aux[addr+((y>>1)*0x400)]
@@ -133,33 +136,28 @@ func (s *System) drawDblHiResGlyph(addr int, mem []uint8, aux []uint8) draw.Imag
 
 		for x := 0; x < 7; x++ {
 			if data0&(1<<x) != 0 {
-				img.Set(x, y, lowResColors[white])
-				img.Set(x, y+1, lowResColors[white])
+				s.screen[x+aX][y+aY] = white
+				s.screen[x+aX][y+1+aY] = white
 			}
 			if data1&(1<<x) != 0 {
-				img.Set(x+7, y, lowResColors[white])
-				img.Set(x+7, y+1, lowResColors[white])
+				s.screen[x+7+aX][y+aY] = white
+				s.screen[x+7+aX][y+1+aY] = white
 			}
 			if data2&(1<<x) != 0 {
-				img.Set(x+14, y, lowResColors[white])
-				img.Set(x+14, y+1, lowResColors[white])
+				s.screen[x+14+aX][y+aY] = white
+				s.screen[x+14+aX][y+1+aY] = white
 			}
 			if data3&(1<<x) != 0 {
-				img.Set(x+21, y, lowResColors[white])
-				img.Set(x+21, y+1, lowResColors[white])
+				s.screen[x+21+aX][y+aY] = white
+				s.screen[x+21+aX][y+1+aY] = white
 			}
 		}
 	}
-
-	return img
 }
 
-func (s *System) drawLoResGlyph(addr int, mem []uint8) draw.Image {
-	rect := image.Rect(0, 0, 14, 16)
-	img := image.NewRGBA(rect)
-
-	topColor := lowResColors[mem[addr]>>4]
-	botColor := lowResColors[mem[addr]&0x0F]
+func (s *System) drawLoResGlyph(aX, aY, addr int, mem []uint8) {
+	topColor := mem[addr] >> 4
+	botColor := mem[addr] & 0x0F
 
 	for y := 0; y < 16; y += 2 {
 		for x := 0; x < 14; x += 2 {
@@ -167,22 +165,18 @@ func (s *System) drawLoResGlyph(addr int, mem []uint8) draw.Image {
 			if y >= 8 {
 				c = topColor
 			}
-			img.Set(x, y, c)
-			img.Set(x+1, y, c)
-			img.Set(x, y+1, c)
-			img.Set(x+1, y+1, c)
+
+			s.screen[x+aX][y+aY] = c
+			s.screen[x+1+aX][y+aY] = c
+			s.screen[x+aX][y+1+aY] = c
+			s.screen[x+1+aX][y+1+aY] = c
 		}
 	}
-
-	return img
 }
 
-func (s *System) drawLoRes80Glyph(addr int, mem []uint8) draw.Image {
-	rect := image.Rect(0, 0, 7, 16)
-	img := image.NewRGBA(rect)
-
-	topColor := lowResColors[mem[addr]>>4]
-	botColor := lowResColors[mem[addr]&0x0F]
+func (s *System) drawLoRes80Glyph(aX, aY, addr int, mem []uint8) {
+	topColor := mem[addr] >> 4
+	botColor := mem[addr] & 0x0F
 
 	for y := 0; y < 16; y += 2 {
 		for x := 0; x < 7; x++ {
@@ -190,50 +184,40 @@ func (s *System) drawLoRes80Glyph(addr int, mem []uint8) draw.Image {
 			if y >= 8 {
 				c = topColor
 			}
-			img.Set(x, y, c)
-			img.Set(x, y+1, c)
+			s.screen[x+aX][y+aY] = c
+			s.screen[x+aX][y+1+aY] = c
 		}
 	}
-
-	return img
 }
 
-func (s *System) drawGlyph(glyph uint8) draw.Image {
-	rect := image.Rect(0, 0, 14, 16)
-	img := image.NewRGBA(rect)
+func (s *System) drawGlyph(aX, aY int, glyph uint8) {
 	offset := int(glyph) * 8
 
 	for y := 0; y < 16; y += 2 {
 		data := s.rom[offset+(y>>1)]
 		for x := 0; x < 14; x += 2 {
 			if data&(1<<(x>>1)) == 0 {
-				img.Set(x, y, color.RGBA{255, 255, 255, 255})
-				img.Set(x+1, y, color.RGBA{255, 255, 255, 255})
-				img.Set(x, y+1, color.RGBA{255, 255, 255, 255})
-				img.Set(x+1, y+1, color.RGBA{255, 255, 255, 255})
+				s.screen[aX+x][aY+y] = white
+				s.screen[aX+x+1][aY+y] = white
+				s.screen[aX+x][aY+y+1] = white
+				s.screen[aX+x+1][aY+y+1] = white
 			}
 		}
 	}
-
-	return img
 }
 
-func (s *System) draw80Glyph(glyph uint8) draw.Image {
-	rect := image.Rect(0, 0, 7, 16)
-	img := image.NewRGBA(rect)
+func (s *System) draw80Glyph(aX, aY int, glyph uint8) {
 	offset := int(glyph) * 8
 
 	for y := 0; y < 16; y += 2 {
 		data := s.rom[offset+(y>>1)]
 		for x := 0; x < 7; x++ {
 			if data&(1<<x) == 0 {
-				img.Set(x, y, color.RGBA{255, 255, 255, 255})
-				img.Set(x, y+1, color.RGBA{255, 255, 255, 255})
+				s.screen[x+aX][y+aY] = white
+				s.screen[x+aX][y+1+aY] = white
 			}
 		}
 	}
-
-	return img
 }
 
 var doubleHiResBlockFrom = [16][16]int{
@@ -274,18 +258,22 @@ var doubleHiResBlockTo = [16][16]int{
 	{0x0007, 0x0007, 0x0007, 0x0007, 0x0007, 0x0007, 0x0007, 0x0007, 0x000F, 0x000F, 0x000F, 0x000F, 0x000F, 0x000F, 0x000F, 0x000F},
 }
 
-func (s *System) colorizeDblHiResDisplay(img *image.RGBA) *image.RGBA {
+func (s *System) colorizeDblHiResDisplay() *image.RGBA {
+	if !s.renderColor {
+		return s.renderDisplay()
+	}
+
 	rect := image.Rect(0, 0, 560, 384)
 	ret := image.NewRGBA(rect)
 
 	for y := 0; y < 384; y += 2 {
 		for x := 0; x < 560; x += 4 {
-			f1, f2, f3, f4 := uint32(0), uint32(0), uint32(0), uint32(0)
+			f1, f2, f3, f4 := uint8(0), uint8(0), uint8(0), uint8(0)
 			if x > 0 {
-				f1, _, _, _ = img.RGBAAt(x-4, y).RGBA()
-				f2, _, _, _ = img.RGBAAt(x-3, y).RGBA()
-				f3, _, _, _ = img.RGBAAt(x-2, y).RGBA()
-				f4, _, _, _ = img.RGBAAt(x-1, y).RGBA()
+				f1 = s.screen[x-4][y]
+				f2 = s.screen[x-3][y]
+				f3 = s.screen[x-2][y]
+				f4 = s.screen[x-1][y]
 			}
 			fromColor := 0
 			if f1 != 0 {
@@ -301,10 +289,10 @@ func (s *System) colorizeDblHiResDisplay(img *image.RGBA) *image.RGBA {
 				fromColor |= 1
 			}
 
-			c1, _, _, _ := img.RGBAAt(x, y).RGBA()
-			c2, _, _, _ := img.RGBAAt(x+1, y).RGBA()
-			c3, _, _, _ := img.RGBAAt(x+2, y).RGBA()
-			c4, _, _, _ := img.RGBAAt(x+3, y).RGBA()
+			c1 := s.screen[x][y]
+			c2 := s.screen[x+1][y]
+			c3 := s.screen[x+2][y]
+			c4 := s.screen[x+3][y]
 			curColor := 0
 			if c1 != 0 {
 				curColor |= 0x8
@@ -319,12 +307,12 @@ func (s *System) colorizeDblHiResDisplay(img *image.RGBA) *image.RGBA {
 				curColor |= 1
 			}
 
-			t1, t2, t3, t4 := uint32(0), uint32(0), uint32(0), uint32(0)
+			t1, t2, t3, t4 := uint8(0), uint8(0), uint8(0), uint8(0)
 			if x < 556 {
-				t1, _, _, _ = img.RGBAAt(x+4, y).RGBA()
-				t2, _, _, _ = img.RGBAAt(x+5, y).RGBA()
-				t3, _, _, _ = img.RGBAAt(x+6, y).RGBA()
-				t4, _, _, _ = img.RGBAAt(x+7, y).RGBA()
+				t1 = s.screen[x+4][y]
+				t2 = s.screen[x+5][y]
+				t3 = s.screen[x+6][y]
+				t4 = s.screen[x+7][y]
 			}
 			toColor := 0
 			if t1 != 0 {
@@ -358,7 +346,30 @@ func (s *System) colorizeDblHiResDisplay(img *image.RGBA) *image.RGBA {
 	return ret
 }
 
-func (s *System) colorizeDisplay(img *image.RGBA) *image.RGBA {
+func (s *System) renderDisplay() *image.RGBA {
+	rect := image.Rect(0, 0, 560, 384)
+	ret := image.NewRGBA(rect)
+
+	for y := 0; y < 384; y += 2 {
+		for x := 0; x < 560; x += 2 {
+			c := s.screen[x][y]
+			color := lowResColors[c]
+			if !s.renderColor && c != 0 {
+				color = s.monoColor
+			}
+			ret.SetRGBA(x, y, color)
+			ret.SetRGBA(x+1, y, color)
+			ret.SetRGBA(x, y+1, color)
+			ret.SetRGBA(x+1, y+1, color)
+		}
+	}
+	return ret
+}
+
+func (s *System) colorizeDisplay() *image.RGBA {
+	if !s.renderColor {
+		return s.renderDisplay()
+	}
 	rect := image.Rect(0, 0, 560, 384)
 	ret := image.NewRGBA(rect)
 
@@ -367,38 +378,34 @@ func (s *System) colorizeDisplay(img *image.RGBA) *image.RGBA {
 			cBef := false
 			cAt := false
 			cNext := false
-			c, _, _, a := img.RGBAAt(x, y).RGBA()
-			//fmt.Printf("%d\n", c)
+			c := s.screen[x][y]
 			if c != 0 {
 				cAt = true
 			}
 			if x > 0 {
-				cb, _, _, _ := img.RGBAAt(x-1, y).RGBA()
+				cb := s.screen[x-1][y]
 				if cb != 0 {
 					cBef = true
 				}
 			}
 			if x < 558 {
-				ca, _, _, _ := img.RGBAAt(x+2, y).RGBA()
+				ca := s.screen[x+2][y]
 				if ca != 0 {
 					cNext = true
 				}
-			}
-			if cBef || cAt || cNext {
-
 			}
 			color := lowResColors[black]
 			if cAt && !cBef && !cNext {
 				if (x>>1)&1 != 0 {
 					//Odd columns are either green or orange
-					if a != 0 {
+					if c != lightblue {
 						color = lowResColors[lightgreen]
 					} else {
 						color = lowResColors[orange]
 					}
 				} else {
 					//Even columns are either purple or blue
-					if a != 0 {
+					if c != lightblue {
 						color = lowResColors[purple]
 					} else {
 						color = lowResColors[mediumblue]
@@ -420,28 +427,32 @@ func (s *System) colorizeDisplay(img *image.RGBA) *image.RGBA {
 //RenderFrame render the current display screen based on the current graphics mode
 func (s *System) RenderFrame(gpuMem []uint8, gpuAuxMem []uint8, gpuStart uint16, textMode bool, hiRes bool, col80 bool, mixed bool, dblhires bool) func(drw draw.Image) image.Rectangle {
 	//fmt.Printf("RENDER: START: 0x%x | TXT: %t | HIRES: %t | 80COL: %t | MIX: %t | DBLHIRES %t\n", gpuStart, textMode, hiRes, col80, mixed, dblhires)
+	//Clear Screen Slice
+	s.screen = make([][]uint8, 560)
+	for i := 0; i < 560; i++ {
+		s.screen[i] = make([]uint8, 384)
+	}
 	if !col80 {
 		for y := 0; y < 24; y++ {
 			if mixed && hiRes && !textMode && y == 20 {
 				gpuStart -= 0x1C00
 			}
 			for x := 0; x < 40; x++ {
-				rect := image.Rect(x*14, y*16, (x*14)+14, (y*16)+16)
 				if hiRes && !textMode && (!mixed || y <= 19) {
 					addr := gpuStart + uint16(x) + rowOffsets[y]
-					draw.Draw(s.display, rect, s.drawHiResGlyph(int(addr), gpuMem), image.Point{0, 0}, draw.Src)
+					s.drawHiResGlyph(x*14, y*16, int(addr), gpuMem)
 				} else if !hiRes && !textMode && (!mixed || y <= 19) {
 					addr := gpuStart + uint16(x) + rowOffsets[y]
-					draw.Draw(s.display, rect, s.drawLoResGlyph(int(addr), gpuMem), image.Point{0, 0}, draw.Src)
+					s.drawLoResGlyph(x*14, y*16, int(addr), gpuMem)
 				} else {
 					addr := uint16(x) + rowOffsets[y]
 					glyph := gpuMem[gpuStart+addr]
-					draw.Draw(s.display, rect, s.drawGlyph(glyph), image.Point{0, 0}, draw.Src)
+					s.drawGlyph(x*14, y*16, glyph)
 				}
 			}
 		}
 		if hiRes && !textMode {
-			img := s.colorizeDisplay(s.display)
+			img := s.colorizeDisplay()
 			return func(drw draw.Image) image.Rectangle { return s.ren.Render(drw, img) }
 		}
 	} else {
@@ -451,46 +462,42 @@ func (s *System) RenderFrame(gpuMem []uint8, gpuAuxMem []uint8, gpuStart uint16,
 				gpuStart -= 0x1C00
 			}
 			for x := 0; x < 80; x += 2 {
-				rect := image.Rect(x*7, y*16, (x*7)+7, (y*16)+16)
-				rect2 := image.Rect((x*7)+7, y*16, (x*7)+14, (y*16)+16)
 				if hiRes && !textMode && (!mixed || y <= 19) {
 					if dblhires {
-						rect = image.Rect(x*7, y*16, (x*7)+28, (y*16)+16)
 						addr := gpuStart + uint16(x>>1) + rowOffsets[y]
-						draw.Draw(s.display, rect, s.drawDblHiResGlyph(int(addr), gpuMem, gpuAuxMem), image.Point{0, 0}, draw.Src)
+						s.drawDblHiResGlyph(x*7, y*16, int(addr), gpuMem, gpuAuxMem)
 						x += 2
-						//fmt.Printf("0x%x\n", addr)
 					} else {
-						rect = image.Rect(x*7, y*16, (x*7)+14, (y*16)+16)
 						addr := gpuStart + uint16(x>>1) + rowOffsets[y]
-						draw.Draw(s.display, rect, s.drawHiResGlyph(int(addr), gpuMem), image.Point{0, 0}, draw.Src)
+						s.drawHiResGlyph(x*7, y*16, int(addr), gpuMem)
 					}
 				} else if !hiRes && !textMode && (!mixed || y <= 19) {
 					addr := gpuStart + uint16(x>>1) + rowOffsets[y]
-					draw.Draw(s.display, rect, s.drawLoResGlyph(int(addr), gpuMem), image.Point{0, 0}, draw.Src)
+					s.drawLoResGlyph(x*7, y*16, int(addr), gpuMem)
 					if dblhires {
-						draw.Draw(s.display, rect2, s.drawLoResGlyph(int(addr), gpuAuxMem), image.Point{0, 0}, draw.Src)
+						s.drawLoResGlyph(x*7, y*16, int(addr), gpuAuxMem)
 					} else {
-						draw.Draw(s.display, rect2, s.drawLoResGlyph(int(addr), gpuMem), image.Point{0, 0}, draw.Src)
+						s.drawLoResGlyph(x*7, y*16, int(addr), gpuMem)
 					}
 				} else {
 					//80 COL TEXT MODE
 					addr := uint16(x>>1) + rowOffsets[y]
 					glyph := gpuMem[gpuStart+addr]
 					glyph2 := gpuAuxMem[gpuStart+addr]
-					draw.Draw(s.display, rect2, s.draw80Glyph(glyph), image.Point{0, 0}, draw.Src)
-					draw.Draw(s.display, rect, s.draw80Glyph(glyph2), image.Point{0, 0}, draw.Src)
+					s.draw80Glyph(x*7, y*16, glyph)
+					s.draw80Glyph((x*7)+7, y*16, glyph2)
 				}
 			}
 		}
 		if hiRes && !textMode {
 			if dblhires {
-				img := s.colorizeDblHiResDisplay(s.display)
+				img := s.colorizeDblHiResDisplay()
 				return func(drw draw.Image) image.Rectangle { return s.ren.Render(drw, img) }
 			}
-			img := s.colorizeDisplay(s.display)
+			img := s.colorizeDisplay()
 			return func(drw draw.Image) image.Rectangle { return s.ren.Render(drw, img) }
 		}
 	}
-	return func(drw draw.Image) image.Rectangle { return s.ren.Render(drw, s.display) }
+	img := s.renderDisplay()
+	return func(drw draw.Image) image.Rectangle { return s.ren.Render(drw, img) }
 }

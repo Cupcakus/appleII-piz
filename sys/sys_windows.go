@@ -131,8 +131,11 @@ func run() {
 		case win.KbType:
 			kbd.KeyType(int(event.(win.KbType).Rune))
 		case win.KbDown:
-			//fmt.Printf("KEY %s\n", event.(win.KbDown).Key)
-			kbd.SysKeyDn(getAppleKey(event.(win.KbDown).Key))
+			if event.(win.KbDown).Key == win.KeyPageDown {
+				vid.ToggleColorMode()
+			} else {
+				kbd.SysKeyDn(getAppleKey(event.(win.KbDown).Key))
+			}
 		case win.KbUp:
 			kbd.SysKeyUp(getAppleKey(event.(win.KbUp).Key))
 		}
