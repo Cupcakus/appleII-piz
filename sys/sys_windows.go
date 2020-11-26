@@ -19,9 +19,6 @@ package sys
 */
 
 import (
-	"image"
-	"image/color"
-	"image/draw"
 	"time"
 
 	"github.com/cupcakus/appleII-piz/appleii"
@@ -48,7 +45,8 @@ func renderLoop(env gui.Env, vid *video.System, cpu *appleii.CPU, mem *appleii.M
 			}
 		}
 		if !bus.GetFastMode() {
-			env.Draw() <- vid.RenderFrame(mem.GetGPUMemory())
+			vid.RenderFrame(mem.GetGPUMemory())
+			env.Draw() <- video.WindowsDraw
 		}
 		end := time.Now()
 		sleepTime := 16 - end.Sub(start).Milliseconds()
@@ -103,24 +101,11 @@ func run() {
 	appleii.NewDsk(bus)
 	bus.Add(mem, 0, 0xFFFF)
 	kbd := appleii.NewKbd(mem, cpu)
-	ren := video.NewRenderer()
+	ren := video.NewRenderer(1024, 768)
 	vid := video.NewVideo(bus, ren)
 
 	cpu.Reset()
 
-	r := image.Rect(0, 0, 640, 480)
-	img := image.NewRGBA(r)
-	for y := 0; y < 480; y++ {
-		for x := 0; x < 640; x++ {
-			img.SetRGBA(x, y, color.RGBA{50, 50, 50, 255})
-		}
-	}
-
-	w.Draw() <- func(drw draw.Image) image.Rectangle {
-		r := image.Rect(0, 0, 640, 480)
-		draw.Draw(drw, r, img, image.ZP, draw.Src)
-		return r
-	}
 	mux, env := gui.NewMux(w)
 	go renderLoop(mux.MakeEnv(), vid, cpu, mem, bus)
 

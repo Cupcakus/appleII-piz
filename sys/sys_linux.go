@@ -19,12 +19,10 @@ package sys
 */
 
 import (
-	"image"
-	"image/color"
-	"image/draw"
+	"time"
 
 	"github.com/cupcakus/appleII-piz/appleii"
-	"github.com/gonutz/framebuffer"
+	"github.com/cupcakus/appleII-piz/video"
 )
 
 //LinuxRunner pi zero specific emulator runtime
@@ -39,21 +37,6 @@ func getAppleKey(key int) appleii.SysKey {
 	}
 }
 
-func run() {
-	/*
-		bus := appleii.NewBus()
-		cpu := appleii.NewCPU(bus)
-		mem := appleii.NewMem(bus)
-		appleii.NewDsk(bus)
-		bus.Add(mem, 0, 0xFFFF)
-		kbd := appleii.NewKbd(mem, cpu)
-		//	ren := video.NewRenderer()
-		//	vid := video.NewVideo(bus, ren)
-
-		cpu.Reset()
-	*/
-}
-
 //NewRunner returns a new LinuxRunner
 func NewRunner() *LinuxRunner {
 	runner := LinuxRunner{}
@@ -66,16 +49,38 @@ func (r *LinuxRunner) Init() {
 
 //Run the runtime
 func (r *LinuxRunner) Run() string {
-	fb, err := framebuffer.Open("/dev/fb0")
-	if err != nil {
-		panic(err)
-	}
-	defer fb.Close()
+	bus := appleii.NewBus()
+	cpu := appleii.NewCPU(bus)
+	mem := appleii.NewMem(bus, cpu)
+	appleii.NewDsk(bus)
+	bus.Add(mem, 0, 0xFFFF)
+	//kbd := appleii.NewKbd(mem, cpu)
+	ren := video.NewRenderer()
+	vid := video.NewVideo(bus, ren)
 
-	magenta := image.NewUniform(color.RGBA{255, 0, 128, 255})
-	draw.Draw(fb, fb.Bounds(), magenta, image.ZP, draw.Src)
+	cpu.Reset()
 
 	for {
+		i := 0
+		start := time.Now()
+		for i <= 17030 {
+			i += cpu.Tick()
+			if i <= 4550 {
+				mem.VBLANK = true
+			} else {
+				mem.VBLANK = false
+			}
+		}
+		if !bus.GetFastMode() {
+			vid.RenderFrame(mem.GetGPUMemory())
+		}
+		end := time.Now()
+		sleepTime := 16 - end.Sub(start).Milliseconds()
+		if sleepTime > 0 {
+			if !bus.GetFastMode() {
+				//time.Sleep(time.Duration(sleepTime) * time.Millisecond)
+			}
+		}
 	}
 
 	return ""

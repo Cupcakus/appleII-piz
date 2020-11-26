@@ -31,7 +31,7 @@ import (
 //Renderer device specific renderer, framebuffer on Pi-Zero, GLFW window on Windows
 type Renderer interface {
 	Init()
-	Render(draw.Image, draw.Image) image.Rectangle
+	Render(draw.Image)
 }
 
 //System Apple IIe Generic video system
@@ -425,7 +425,7 @@ func (s *System) colorizeDisplay() *image.RGBA {
 }
 
 //RenderFrame render the current display screen based on the current graphics mode
-func (s *System) RenderFrame(gpuMem []uint8, gpuAuxMem []uint8, gpuStart uint16, textMode bool, hiRes bool, col80 bool, mixed bool, dblhires bool) func(drw draw.Image) image.Rectangle {
+func (s *System) RenderFrame(gpuMem []uint8, gpuAuxMem []uint8, gpuStart uint16, textMode bool, hiRes bool, col80 bool, mixed bool, dblhires bool) {
 	//fmt.Printf("RENDER: START: 0x%x | TXT: %t | HIRES: %t | 80COL: %t | MIX: %t | DBLHIRES %t\n", gpuStart, textMode, hiRes, col80, mixed, dblhires)
 	//Clear Screen Slice
 	s.screen = make([][]uint8, 560)
@@ -453,7 +453,8 @@ func (s *System) RenderFrame(gpuMem []uint8, gpuAuxMem []uint8, gpuStart uint16,
 		}
 		if hiRes && !textMode {
 			img := s.colorizeDisplay()
-			return func(drw draw.Image) image.Rectangle { return s.ren.Render(drw, img) }
+			s.ren.Render(img)
+			return
 		}
 	} else {
 		//80 Column mode
@@ -492,12 +493,15 @@ func (s *System) RenderFrame(gpuMem []uint8, gpuAuxMem []uint8, gpuStart uint16,
 		if hiRes && !textMode {
 			if dblhires {
 				img := s.colorizeDblHiResDisplay()
-				return func(drw draw.Image) image.Rectangle { return s.ren.Render(drw, img) }
+				s.ren.Render(img)
+				return
 			}
 			img := s.colorizeDisplay()
-			return func(drw draw.Image) image.Rectangle { return s.ren.Render(drw, img) }
+			s.ren.Render(img)
+			return
 		}
 	}
 	img := s.renderDisplay()
-	return func(drw draw.Image) image.Rectangle { return s.ren.Render(drw, img) }
+	s.ren.Render(img)
+	return
 }
